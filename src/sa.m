@@ -530,10 +530,11 @@ bool scripting_addition_focus_window(uint32_t wid)
     return sa_payload_send(SA_OPCODE_WINDOW_FOCUS);
 }
 
-bool scripting_addition_scale_window(uint32_t wid, float x, float y, float w, float h)
+bool scripting_addition_scale_window(uint32_t wid, bool value, float x, float y, float w, float h)
 {
     sa_payload_init();
     pack(wid);
+    pack(value);
     pack(x);
     pack(y);
     pack(w);

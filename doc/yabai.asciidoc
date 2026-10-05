@@ -391,8 +391,9 @@ COMMAND
 *--display* '<DISPLAY_SEL>'::
     Send the selected window to the given display.
 
-*--space* '<SPACE_SEL>'::
-    Send the selected window to the given space.
+*--space* '<SPACE_SEL>|auto'::
+    Send the selected window to the given space. +
+    Specify the value 'auto' to send it to the space or display assigned by the rules that match it.
 
 *--swap* '<WINDOW_SEL>'::
     Swap position of the selected window and the given window.
@@ -426,6 +427,19 @@ COMMAND
 *--toggle* 'float|sticky|pip|shadow|split|zoom-parent|zoom-fullscreen|windowed-fullscreen|native-fullscreen|expose|<LABEL>'::
     Toggle the given property of the selected window. +
     The following properties require System Integrity Protection to be partially disabled: sticky, pip, shadow, LABEL (scratchpad identifier) .
+
+*--float* 'on|off|auto'::
+    Set whether the selected window is floating. +
+    Specify the value 'auto' to reset it to what the matching rules say, or to automatic management if no rule sets 'manage'.
+
+*--sticky* 'on|off|auto'::
+    Set whether the selected window is sticky. +
+    Specify the value 'auto' to reset it to what the matching rules say, or off if no rule sets 'sticky'. +
+    System Integrity Protection must be partially disabled.
+
+*--pip* 'on|off|auto'::
+    Set whether the selected window is shown in picture-in-picture. 'auto' is the same as 'off'. +
+    System Integrity Protection must be partially disabled.
 
 *--sub-layer* '<LAYER>'::
     Set the stacking sub-layer of the selected window. +
@@ -578,6 +592,7 @@ WINDOW
     "is-hidden": bool,
     "is-floating": bool,
     "is-sticky": bool,
+    "is-pip": bool,
     "is-grabbed": bool
 }
 ----

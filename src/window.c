@@ -397,6 +397,13 @@ void window_nonax_serialize(FILE *rsp, uint32_t wid, uint64_t flags, uint64_t *m
         did_output = true;
     }
 
+    if (flags & WINDOW_PROPERTY_IS_PIP) {
+        if (did_output) fprintf(rsp, ",\n");
+
+        fprintf(rsp, "\t\"is-pip\":%s", json_bool(false));
+        did_output = true;
+    }
+
     if (flags & WINDOW_PROPERTY_IS_GRABBED) {
         if (did_output) fprintf(rsp, ",\n");
 
@@ -697,6 +704,13 @@ void window_serialize(FILE *rsp, struct window *window, uint64_t flags, uint64_t
         if (did_output) fprintf(rsp, ",\n");
 
         fprintf(rsp, "\t\"is-sticky\":%s", json_bool(is_sticky));
+        did_output = true;
+    }
+
+    if (flags & WINDOW_PROPERTY_IS_PIP) {
+        if (did_output) fprintf(rsp, ",\n");
+
+        fprintf(rsp, "\t\"is-pip\":%s", json_bool(window_check_flag(window, WINDOW_PIP)));
         did_output = true;
     }
 

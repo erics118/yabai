@@ -111,6 +111,9 @@ void window_manager_apply_manage_rule_effects_to_window(struct space_manager *sm
 void window_manager_apply_rule_effects_to_window(struct space_manager *sm, struct window_manager *wm, struct window *window, struct rule_effects *effects);
 void window_manager_apply_manage_rules_to_window(struct space_manager *sm, struct window_manager *wm, struct window *window, char *window_title, char *window_role, char *window_subrole, bool one_shot_rules);
 void window_manager_apply_rules_to_window(struct space_manager *sm, struct window_manager *wm, struct window *window, char *window_title, char *window_role, char *window_subrole, bool one_shot_rules);
+void window_manager_reset_window_floating(struct space_manager *sm, struct window_manager *wm, struct window *window);
+void window_manager_reset_window_sticky(struct space_manager *sm, struct window_manager *wm, struct window *window);
+uint64_t window_manager_rule_space_for_window(struct window_manager *wm, struct window *window);
 void window_manager_center_mouse(struct window_manager *wm, struct window *window);
 bool window_manager_is_window_eligible(struct window *window);
 bool window_manager_should_manage_window(struct window *window);
@@ -201,6 +204,7 @@ void window_manager_toggle_window_windowed_fullscreen(struct window *window);
 void window_manager_toggle_window_native_fullscreen(struct window *window);
 void window_manager_toggle_window_expose(struct window *window);
 void window_manager_toggle_window_pip(struct space_manager *sm, struct window *window);
+void window_manager_set_window_pip(struct space_manager *sm, struct window *window, bool should_pip);
 bool window_manager_toggle_scratchpad_window_by_label(struct window_manager *wm, char *label);
 bool window_manager_toggle_scratchpad_window(struct window_manager *wm, struct window *window, int forced_mode);
 bool window_manager_set_scratchpad_for_window(struct window_manager *wm, struct window *window, char *label);

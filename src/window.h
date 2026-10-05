@@ -61,6 +61,7 @@ static CFStringRef ax_window_notification[] =
     WINDOW_PROPERTY_ENTRY("is-hidden",            WINDOW_PROPERTY_IS_HIDDEN,           0x020000000) \
     WINDOW_PROPERTY_ENTRY("is-floating",          WINDOW_PROPERTY_IS_FLOATING,         0x040000000) \
     WINDOW_PROPERTY_ENTRY("is-sticky",            WINDOW_PROPERTY_IS_STICKY,           0x080000000) \
+    WINDOW_PROPERTY_ENTRY("is-pip",               WINDOW_PROPERTY_IS_PIP,              0x200000000) \
     WINDOW_PROPERTY_ENTRY("is-grabbed",           WINDOW_PROPERTY_IS_GRABBED,          0x100000000)
 
 enum window_property
@@ -115,7 +116,9 @@ enum window_flag
     WINDOW_WINDOWED   = 0x20,
     WINDOW_MOVABLE    = 0x40,
     WINDOW_RESIZABLE  = 0x80,
-    WINDOW_ORDERED_OUT = 0x100
+    WINDOW_ORDERED_OUT = 0x100,
+    WINDOW_PIP         = 0x200,
+    WINDOW_PIP_PENDING = 0x400
 };
 
 enum window_rule_flag

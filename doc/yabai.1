@@ -2,12 +2,12 @@
 .\"     Title: yabai
 .\"    Author: [see the "AUTHOR(S)" section]
 .\" Generator: Asciidoctor 2.0.26
-.\"      Date: 2026-05-08
+.\"      Date: 2026-10-05
 .\"    Manual: Yabai Manual
 .\"    Source: Yabai
 .\"  Language: English
 .\"
-.TH "YABAI" "1" "2026-05-08" "Yabai" "Yabai Manual"
+.TH "YABAI" "1" "2026-10-05" "Yabai" "Yabai Manual"
 .ie \n(.g .ds Aq \(aq
 .el       .ds Aq '
 .ss \n[.ss] 0
@@ -575,9 +575,11 @@ Note that you can also \fI\-\-focus\fP a minimized window to restore it as the f
 Send the selected window to the given display.
 .RE
 .sp
-\fB\-\-space\fP \fI<SPACE_SEL>\fP
+\fB\-\-space\fP \fI<SPACE_SEL>|auto\fP
 .RS 4
 Send the selected window to the given space.
+.br
+Specify the value \fIauto\fP to send it to the space or display assigned by the rules that match it.
 .RE
 .sp
 \fB\-\-swap\fP \fI<WINDOW_SEL>\fP
@@ -635,6 +637,29 @@ A positive/negative delta will increase/decrease the size of the left\-child.
 Toggle the given property of the selected window.
 .br
 The following properties require System Integrity Protection to be partially disabled: sticky, pip, shadow, LABEL (scratchpad identifier) .
+.RE
+.sp
+\fB\-\-float\fP \fIon|off|auto\fP
+.RS 4
+Set whether the selected window is floating.
+.br
+Specify the value \fIauto\fP to reset it to what the matching rules say, or to automatic management if no rule sets \fImanage\fP.
+.RE
+.sp
+\fB\-\-sticky\fP \fIon|off|auto\fP
+.RS 4
+Set whether the selected window is sticky.
+.br
+Specify the value \fIauto\fP to reset it to what the matching rules say, or off if no rule sets \fIsticky\fP.
+.br
+System Integrity Protection must be partially disabled.
+.RE
+.sp
+\fB\-\-pip\fP \fIon|off|auto\fP
+.RS 4
+Set whether the selected window is shown in picture\-in\-picture. \fIauto\fP is the same as \fIoff\fP.
+.br
+System Integrity Protection must be partially disabled.
 .RE
 .sp
 \fB\-\-sub\-layer\fP \fI<LAYER>\fP
@@ -825,6 +850,7 @@ WINDOW
     "is\-hidden": bool,
     "is\-floating": bool,
     "is\-sticky": bool,
+    "is\-pip": bool,
     "is\-grabbed": bool
 }
 .fam

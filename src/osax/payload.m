@@ -630,14 +630,14 @@ static void do_window_scale(char *message, char *end)
     unpack(wid);
     if (!wid) return;
 
+    bool value;
+    unpack(value);
+
     CGRect frame = {};
     SLSGetWindowBounds(SLSMainConnectionID(), wid, &frame);
     CGAffineTransform original_transform = CGAffineTransformMakeTranslation(-frame.origin.x, -frame.origin.y);
 
-    CGAffineTransform current_transform;
-    SLSGetWindowTransform(SLSMainConnectionID(), wid, &current_transform);
-
-    if (CGAffineTransformEqualToTransform(current_transform, original_transform)) {
+    if (value == 1) {
         float dx, dy, dw, dh;
         unpack(dx);
         unpack(dy);

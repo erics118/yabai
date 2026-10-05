@@ -147,6 +147,9 @@ extern bool g_verbose;
 #define COMMAND_WINDOW_RAISE      "--raise"
 #define COMMAND_WINDOW_LOWER      "--lower"
 #define COMMAND_WINDOW_TOGGLE     "--toggle"
+#define COMMAND_WINDOW_FLOAT      "--float"
+#define COMMAND_WINDOW_STICKY     "--sticky"
+#define COMMAND_WINDOW_PIP        "--pip"
 #define COMMAND_WINDOW_SCRATCHPAD "--scratchpad"
 
 #define ARGUMENT_WINDOW_SEL_LARGEST     "largest"
@@ -235,6 +238,7 @@ extern bool g_verbose;
 /* --------------------------------COMMON ARGUMENTS----------------------------- */
 #define ARGUMENT_COMMON_VAL_ON           "on"
 #define ARGUMENT_COMMON_VAL_OFF          "off"
+#define ARGUMENT_COMMON_VAL_AUTO         "auto"
 #define ARGUMENT_COMMON_SEL_PREV         "prev"
 #define ARGUMENT_COMMON_SEL_NEXT         "next"
 #define ARGUMENT_COMMON_SEL_FIRST        "first"
@@ -2148,6 +2152,20 @@ static void handle_domain_window(FILE *rsp, struct token domain, char *message)
                 }
             }
         } else if (token_equals(command, COMMAND_WINDOW_SPACE)) {
+            char *peek = message;
+            if (token_equals(get_token(&peek), ARGUMENT_COMMON_VAL_AUTO)) {
+                message = peek;
+                uint64_t sid = window_manager_rule_space_for_window(&g_window_manager, acting_window);
+                if (!sid) {
+                    daemon_fail(rsp, "no rule assigns a space or display to window with id '%d'.\n", acting_window->id);
+                } else if (space_is_fullscreen(sid)) {
+                    daemon_fail(rsp, "can not move window to a macOS fullscreen space!\n");
+                } else {
+                    window_manager_send_window_to_space(&g_space_manager, &g_window_manager, acting_window, sid, false);
+                }
+                continue;
+            }
+
             struct selector selector = parse_space_selector(rsp, &message, space_manager_active_space(), false);
             if (selector.did_parse && selector.sid) {
                 if (space_is_fullscreen(selector.sid)) {
@@ -2350,6 +2368,37 @@ static void handle_domain_window(FILE *rsp, struct token domain, char *message)
                 if (!window_manager_set_window_layer(acting_window, LAYER_AUTO)) {
                     daemon_fail(rsp, "could not change sub-layer of window with id '%d' due to an error with the scripting-addition.\n", acting_window->id);
                 }
+            } else {
+                daemon_fail(rsp, "unknown value '%.*s' given to command '%.*s' for domain '%.*s'\n", value.length, value.text, command.length, command.text, domain.length, domain.text);
+            }
+        } else if (token_equals(command, COMMAND_WINDOW_FLOAT)) {
+            struct token value = get_token(&message);
+            if (token_equals(value, ARGUMENT_COMMON_VAL_ON)) {
+                window_manager_make_window_floating(&g_space_manager, &g_window_manager, acting_window, true, false);
+            } else if (token_equals(value, ARGUMENT_COMMON_VAL_OFF)) {
+                window_manager_make_window_floating(&g_space_manager, &g_window_manager, acting_window, false, false);
+            } else if (token_equals(value, ARGUMENT_COMMON_VAL_AUTO)) {
+                window_manager_reset_window_floating(&g_space_manager, &g_window_manager, acting_window);
+            } else {
+                daemon_fail(rsp, "unknown value '%.*s' given to command '%.*s' for domain '%.*s'\n", value.length, value.text, command.length, command.text, domain.length, domain.text);
+            }
+        } else if (token_equals(command, COMMAND_WINDOW_STICKY)) {
+            struct token value = get_token(&message);
+            if (token_equals(value, ARGUMENT_COMMON_VAL_ON)) {
+                window_manager_make_window_sticky(&g_space_manager, &g_window_manager, acting_window, true);
+            } else if (token_equals(value, ARGUMENT_COMMON_VAL_OFF)) {
+                window_manager_make_window_sticky(&g_space_manager, &g_window_manager, acting_window, false);
+            } else if (token_equals(value, ARGUMENT_COMMON_VAL_AUTO)) {
+                window_manager_reset_window_sticky(&g_space_manager, &g_window_manager, acting_window);
+            } else {
+                daemon_fail(rsp, "unknown value '%.*s' given to command '%.*s' for domain '%.*s'\n", value.length, value.text, command.length, command.text, domain.length, domain.text);
+            }
+        } else if (token_equals(command, COMMAND_WINDOW_PIP)) {
+            struct token value = get_token(&message);
+            if (token_equals(value, ARGUMENT_COMMON_VAL_ON)) {
+                window_manager_set_window_pip(&g_space_manager, acting_window, true);
+            } else if (token_equals(value, ARGUMENT_COMMON_VAL_OFF) || token_equals(value, ARGUMENT_COMMON_VAL_AUTO)) {
+                window_manager_set_window_pip(&g_space_manager, acting_window, false);
             } else {
                 daemon_fail(rsp, "unknown value '%.*s' given to command '%.*s' for domain '%.*s'\n", value.length, value.text, command.length, command.text, domain.length, domain.text);
             }

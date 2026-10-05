@@ -220,6 +220,62 @@ void window_manager_apply_rules_to_window(struct space_manager *sm, struct windo
     if (match) window_manager_apply_rule_effects_to_window(sm, wm, window, &effects);
 }
 
+// matches rules the same way as the two apply functions above, without applying any effects
+// only manage, sticky, sid and did are filled in
+static struct rule_effects window_manager_rule_effects_for_window(struct window_manager *wm, struct window *window)
+{
+    struct rule_effects effects = {0};
+    char *window_title = window_title_ts(window);
+    char *window_role = window_role_ts(window);
+    char *window_subrole = window_subrole_ts(window);
+
+    for (int i = 0; i < buf_len(wm->rules); ++i) {
+        struct rule *rule = &wm->rules[i];
+        if (rule_check_flag(rule, RULE_ONE_SHOT)) continue;
+        if (!window_manager_rule_matches_window(rule, window, window_title, window_role, window_subrole)) continue;
+
+        bool role_valid = (rule_check_flag(rule, RULE_ROLE_VALID)    || string_equals(window_role   , "AXWindow")) &&
+                          (rule_check_flag(rule, RULE_SUBROLE_VALID) || string_equals(window_subrole, "AXStandardWindow"));
+
+        if (rule->effects.manage != RULE_PROP_UD && (rule->effects.manage != RULE_PROP_ON || role_valid)) {
+            effects.manage = rule->effects.manage;
+        }
+
+        if (!window_check_rule_flag(window, WINDOW_RULE_MANAGED) && !role_valid) continue;
+
+        if (rule->effects.sticky != RULE_PROP_UD) effects.sticky = rule->effects.sticky;
+        if (rule->effects.sid) effects.sid = rule->effects.sid;
+        if (rule->effects.did) effects.did = rule->effects.did;
+    }
+
+    return effects;
+}
+
+void window_manager_reset_window_floating(struct space_manager *sm, struct window_manager *wm, struct window *window)
+{
+    struct rule_effects effects = window_manager_rule_effects_for_window(wm, window);
+
+    if (effects.manage == RULE_PROP_UD) {
+        window_manager_make_window_floating(sm, wm, window, false, false);
+    } else {
+        window_manager_apply_manage_rule_effects_to_window(sm, wm, window, &effects);
+    }
+}
+
+void window_manager_reset_window_sticky(struct space_manager *sm, struct window_manager *wm, struct window *window)
+{
+    struct rule_effects effects = window_manager_rule_effects_for_window(wm, window);
+    window_manager_make_window_sticky(sm, wm, window, effects.sticky == RULE_PROP_ON);
+}
+
+uint64_t window_manager_rule_space_for_window(struct window_manager *wm, struct window *window)
+{
+    struct rule_effects effects = window_manager_rule_effects_for_window(wm, window);
+    if (effects.sid) return effects.sid;
+    if (effects.did) return display_space_id(effects.did);
+    return 0;
+}
+
 void window_manager_set_focus_follows_mouse(struct window_manager *wm, enum ffm_mode mode)
 {
     mouse_handler_end(&g_mouse_state);
@@ -2441,6 +2497,12 @@ void window_manager_toggle_window_expose(struct window *window)
 
 void window_manager_toggle_window_pip(struct space_manager *sm, struct window *window)
 {
+    window_manager_set_window_pip(sm, window, !window_check_flag(window, WINDOW_PIP));
+}
+
+// also called on every move and resize of a pip window, since the transform is fixed to the frame it was built from
+void window_manager_set_window_pip(struct space_manager *sm, struct window *window, bool should_pip)
+{
     TIME_FUNCTION;
 
     uint32_t did = window_display_id(window->id);
@@ -2457,7 +2519,13 @@ void window_manager_toggle_window_pip(struct space_manager *sm, struct window *w
         bounds.size.height -= (dview->top_padding + dview->bottom_padding);
     }
 
-    scripting_addition_scale_window(window->id, bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height);
+    if (scripting_addition_scale_window(window->id, should_pip, bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height)) {
+        if (should_pip) {
+            window_set_flag(window, WINDOW_PIP);
+        } else {
+            window_clear_flag(window, WINDOW_PIP);
+        }
+    }
 }
 
 static inline struct window *window_manager_find_scratchpad_window(struct window_manager *wm, char *label)

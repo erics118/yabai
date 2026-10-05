@@ -679,6 +679,36 @@ static EVENT_HANDLER(WINDOW_FOCUSED)
     event_signal_push(SIGNAL_WINDOW_FOCUSED, window);
 }
 
+// the move/resize notification arrives before the windowserver applies the new frame to the transform
+static void event_loop_schedule_pip_refresh(struct window *window)
+{
+    if (window_check_flag(window, WINDOW_PIP_PENDING)) return;
+    window_set_flag(window, WINDOW_PIP_PENDING);
+
+    uint32_t window_id = window->id;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1f * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        event_loop_post(&g_event_loop, WINDOW_PIP_REFRESH, (void *)(intptr_t) window_id, 0);
+    });
+}
+
+static EVENT_HANDLER(WINDOW_PIP_REFRESH)
+{
+    uint32_t window_id = (uint32_t)(intptr_t) context;
+    struct window *window = window_manager_find_window(&g_window_manager, window_id);
+    if (!window) return;
+
+    window_clear_flag(window, WINDOW_PIP_PENDING);
+    if (!window_check_flag(window, WINDOW_PIP)) return;
+
+    // the app maps the cursor through the transform, so changing it mid-drag makes the drag run away
+    if (CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonLeft)) {
+        event_loop_schedule_pip_refresh(window);
+        return;
+    }
+
+    window_manager_set_window_pip(&g_space_manager, window, true);
+}
+
 static EVENT_HANDLER(WINDOW_MOVED)
 {
     uint32_t window_id = (uint32_t)(intptr_t) context;
@@ -693,6 +723,11 @@ static EVENT_HANDLER(WINDOW_MOVED)
     if (window->application->is_hidden) {
         debug("%s: %d was moved while the application is hidden, ignoring event..\n", __FUNCTION__, window_id);
         return;
+    }
+
+    // before the debounce, since a move made by yabai already updated window->frame
+    if (window_check_flag(window, WINDOW_PIP)) {
+        event_loop_schedule_pip_refresh(window);
     }
 
     CGPoint new_origin = window_ax_origin(window);
@@ -743,6 +778,11 @@ static EVENT_HANDLER(WINDOW_RESIZED)
     if (window->application->is_hidden) {
         debug("%s: %d was resized while the application is hidden, ignoring event..\n", __FUNCTION__, window_id);
         return;
+    }
+
+    // before the debounce, since a resize made by yabai already updated window->frame
+    if (window_check_flag(window, WINDOW_PIP)) {
+        event_loop_schedule_pip_refresh(window);
     }
 
     CGRect new_frame = window_ax_frame(window);
