@@ -2578,7 +2578,7 @@ static void handle_domain_query(FILE *rsp, struct token domain, char *message)
             }
 
             if (acting_window) {
-                window_serialize(rsp, acting_window, properties.flags);
+                window_serialize(rsp, acting_window, properties.flags, NULL);
                 fprintf(rsp, "\n");
             } else {
                 daemon_fail(rsp, "could not retrieve window details.\n");

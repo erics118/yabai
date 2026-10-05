@@ -200,7 +200,7 @@ void mouse_drop_action_warp(struct window_manager *wm, struct view *src_view, st
     window_manager_purify_window(wm, src_window);
 
     struct window_node *src_node_add = view_add_window_node_with_insertion_point(dst_view, src_window, dst_window->id);
-    window_manager_add_managed_window(wm, src_window, dst_view);
+    if (src_node_add) window_manager_add_managed_window(wm, src_window, dst_view);
 
     struct window_capture *window_list = NULL;
 
@@ -208,7 +208,7 @@ void mouse_drop_action_warp(struct window_manager *wm, struct view *src_view, st
         window_node_capture_windows(src_node_rm, &window_list);
     }
 
-    if (src_node_rm != src_node_add && src_node_rm != src_node_add->parent) {
+    if (src_node_add && src_node_rm != src_node_add && src_node_rm != src_node_add->parent) {
         window_node_capture_windows(src_node_add, &window_list);
     }
 
@@ -271,6 +271,25 @@ void mouse_state_init(struct mouse_state *state)
     state->drop_action = MOUSE_MODE_SWAP;
 }
 
+struct mouse_handler_thread_context
+{
+    struct mouse_state *mouse_state;
+    dispatch_semaphore_t ready;
+};
+
+static void *mouse_handler_thread(void *data)
+{
+    struct mouse_handler_thread_context *context = data;
+    struct mouse_state *mouse_state = context->mouse_state;
+
+    mouse_state->runloop = (CFRunLoopRef) CFRetain(CFRunLoopGetCurrent());
+    CFRunLoopAddSource(mouse_state->runloop, mouse_state->runloop_source, kCFRunLoopCommonModes);
+    dispatch_semaphore_signal(context->ready);
+    CFRunLoopRun();
+
+    return NULL;
+}
+
 bool mouse_handler_begin(struct mouse_state *mouse_state, uint32_t mask)
 {
     if (mouse_state->handle) return true;
@@ -281,11 +300,24 @@ bool mouse_handler_begin(struct mouse_state *mouse_state, uint32_t mask)
     if (!CGEventTapIsEnabled(mouse_state->handle)) {
         CFMachPortInvalidate(mouse_state->handle);
         CFRelease(mouse_state->handle);
+        mouse_state->handle = NULL;
         return false;
     }
 
     mouse_state->runloop_source = CFMachPortCreateRunLoopSource(NULL, mouse_state->handle, 0);
-    CFRunLoopAddSource(CFRunLoopGetMain(), mouse_state->runloop_source, kCFRunLoopCommonModes);
+
+    struct mouse_handler_thread_context context = { mouse_state, dispatch_semaphore_create(0) };
+    if (pthread_create(&mouse_state->thread, NULL, &mouse_handler_thread, &context) != 0) {
+        dispatch_release(context.ready);
+        CFRelease(mouse_state->runloop_source);
+        CFMachPortInvalidate(mouse_state->handle);
+        CFRelease(mouse_state->handle);
+        mouse_state->handle = NULL;
+        return false;
+    }
+
+    dispatch_semaphore_wait(context.ready, DISPATCH_TIME_FOREVER);
+    dispatch_release(context.ready);
 
     return true;
 }
@@ -296,7 +328,11 @@ void mouse_handler_end(struct mouse_state *mouse_state)
 
     CGEventTapEnable(mouse_state->handle, false);
     CFMachPortInvalidate(mouse_state->handle);
-    CFRunLoopRemoveSource(CFRunLoopGetMain(), mouse_state->runloop_source, kCFRunLoopCommonModes);
+    CFRunLoopRemoveSource(mouse_state->runloop, mouse_state->runloop_source, kCFRunLoopCommonModes);
+    CFRunLoopStop(mouse_state->runloop);
+    pthread_join(mouse_state->thread, NULL);
+    CFRelease(mouse_state->runloop);
+    mouse_state->runloop = NULL;
     CFRelease(mouse_state->runloop_source);
     CFRelease(mouse_state->handle);
     __atomic_store_n(&mouse_state->handle, NULL, __ATOMIC_RELEASE);

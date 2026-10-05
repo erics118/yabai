@@ -99,7 +99,7 @@ struct window
     bool is_eligible;
     uint8_t notification;
     uint8_t rule_flags;
-    uint8_t flags;
+    uint16_t flags;
     float opacity;
     int layer;
     char *scratchpad;
@@ -114,7 +114,8 @@ enum window_flag
     WINDOW_STICKY     = 0x10,
     WINDOW_WINDOWED   = 0x20,
     WINDOW_MOVABLE    = 0x40,
-    WINDOW_RESIZABLE  = 0x80
+    WINDOW_RESIZABLE  = 0x80,
+    WINDOW_ORDERED_OUT = 0x100
 };
 
 enum window_rule_flag
@@ -137,8 +138,7 @@ CFStringRef window_display_uuid(uint32_t wid);
 uint32_t window_display_id(uint32_t wid);
 uint64_t window_space(uint32_t wid);
 uint64_t *window_space_list(uint32_t wid, int *count);
-void window_unknown_serialize(FILE *rsp, uint32_t wid, uint64_t flags);
-void window_serialize(FILE *rsp, struct window *window, uint64_t flags);
+void window_serialize(FILE *rsp, struct window *window, uint64_t flags, uint64_t *mc_space_list);
 char *window_property_title_ts(uint32_t wid);
 char *window_title_ts(struct window *window);
 CFStringRef window_title(struct window *window);

@@ -416,7 +416,7 @@ out:
 }
 
 #define sa_payload_init() char bytes[SA_SOCKET_BUFF_LEN]; int16_t length = 1+sizeof(length)
-#define pack(v) memcpy(bytes+length, &v, sizeof(v)); length += sizeof(v)
+#define pack(v) do { if (length + sizeof(v) > SA_SOCKET_BUFF_LEN) return false; memcpy(bytes+length, &v, sizeof(v)); length += sizeof(v); } while (0)
 #define sa_payload_send(op) *(int16_t*)bytes = length-sizeof(length), bytes[sizeof(length)] = op, scripting_addition_send_bytes(bytes, length)
 
 static bool scripting_addition_send_bytes(char *bytes, int length)

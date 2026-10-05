@@ -16,15 +16,17 @@ volatile uint64_t __last_cmd_tab_time;
 static void update_window_notifications(void)
 {
     int window_count = 0;
-    uint32_t window_list[1024] = {0};
+    uint32_t *window_list;
 
     if (workspace_is_macos_sequoia() || (workspace_is_macos_tahoe() || workspace_is_macos_goldengate())) {
         // NOTE(asmvik): Subscribe to all windows because of window_destroyed (and ordered) notifications
+        window_list = ts_alloc_list(uint32_t, g_window_manager.window.count);
         table_for (struct window *window, g_window_manager.window, {
             window_list[window_count++] = window->id;
         })
     } else {
         // NOTE(asmvik): Subscribe to windows that have a feedback_border because of window_ordered notifications
+        window_list = ts_alloc_list(uint32_t, g_window_manager.insert_feedback.count);
         table_for (struct window_node *node, g_window_manager.insert_feedback, {
             window_list[window_count++] = node->window_order[0];
         })
@@ -174,6 +176,10 @@ static EVENT_HANDLER(APPLICATION_LAUNCHED)
 
     int window_count;
     struct window **window_list = window_manager_add_application_windows(&g_space_manager, &g_window_manager, application, &window_count);
+
+    // the AX API only returns windows on visible spaces
+    // brute-force windows the application restored on an inactive space while launching
+    window_manager_add_existing_application_windows(&g_space_manager, &g_window_manager, application, -1);
     uint32_t prev_window_id = g_window_manager.focused_window_id;
 
     uint64_t sid;
@@ -208,14 +214,15 @@ static EVENT_HANDLER(APPLICATION_LAUNCHED)
                 // This is necessary to make sure that we do not call the AX API for each modification to the tree.
                 //
 
-                window_manager_adjust_layer(window, LAYER_BELOW);
-                view_add_window_node_with_insertion_point(view, window, prev_window_id);
-                window_manager_add_managed_window(&g_window_manager, window, view);
+                if (view_add_window_node_with_insertion_point(view, window, prev_window_id)) {
+                    window_manager_adjust_layer(window, LAYER_BELOW);
+                    window_manager_add_managed_window(&g_window_manager, window, view);
 
-                view_set_flag(view, VIEW_IS_DIRTY);
-                view_list[view_count++] = view;
+                    view_set_flag(view, VIEW_IS_DIRTY);
+                    view_list[view_count++] = view;
 
-                prev_window_id = window->id;
+                    prev_window_id = window->id;
+                }
             }
         }
 
@@ -455,8 +462,8 @@ static EVENT_HANDLER(APPLICATION_VISIBLE)
             // This is necessary to make sure that we do not call the AX API for each modification to the tree.
             //
 
+            if (!view_add_window_node_with_insertion_point(view, window, prev_window_id)) continue;
             window_manager_adjust_layer(window, LAYER_BELOW);
-            view_add_window_node_with_insertion_point(view, window, prev_window_id);
             window_manager_add_managed_window(&g_window_manager, window, view);
 
             view_set_flag(view, VIEW_IS_DIRTY);
@@ -947,6 +954,34 @@ static EVENT_HANDLER(SLS_WINDOW_ORDERED)
     debug("%s: %d\n", __FUNCTION__, wid);
     struct window_node *node = table_find(&g_window_manager.insert_feedback, &wid);
     if (node) SLSOrderWindow(g_connection, node->feedback_window.id, 1, node->window_order[0]);
+
+    // some apps close a window by ordering it out and keeping it alive
+    // no destroyed event arrives, so untile the window while it stays ordered out
+    struct window *window = window_manager_find_window(&g_window_manager, wid);
+    if (!window || mission_control_is_active()) return;
+
+    struct view *view = window_manager_find_managed_window(&g_window_manager, window);
+    if (!view && !window_check_flag(window, WINDOW_ORDERED_OUT)) return;
+
+    uint8_t ordered_in = 0;
+    SLSWindowIsOrderedIn(g_connection, wid, &ordered_in);
+
+    if (view && !ordered_in) {
+        debug("%s: %s %d was ordered out, untiling..\n", __FUNCTION__, window->application->name, wid);
+        window_set_flag(window, WINDOW_ORDERED_OUT);
+        space_manager_untile_window(view, window);
+        window_manager_remove_managed_window(&g_window_manager, window->id);
+        window_manager_purify_window(&g_window_manager, window);
+    } else if (!view && ordered_in) {
+        window_clear_flag(window, WINDOW_ORDERED_OUT);
+
+        uint64_t sid = space_manager_active_space();
+        if (space_manager_is_window_on_space(sid, window) && window_manager_should_manage_window(window)) {
+            debug("%s: %s %d was ordered back in, tiling..\n", __FUNCTION__, window->application->name, wid);
+            view = space_manager_tile_window_on_space(&g_space_manager, window, sid);
+            window_manager_add_managed_window(&g_window_manager, window, view);
+        }
+    }
 }
 
 static EVENT_HANDLER(SLS_WINDOW_DESTROYED)

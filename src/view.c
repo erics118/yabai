@@ -776,6 +776,7 @@ struct window_node *view_add_window_node_with_insertion_point(struct view *view,
                 insert_feedback_destroy(leaf);
 
                 if (do_stack) {
+                    if (leaf->window_count+1 >= NODE_MAX_WINDOW_COUNT) return NULL;
                     view_stack_window_node(leaf, window);
                     return leaf;
                 }
@@ -804,6 +805,7 @@ struct window_node *view_add_window_node_with_insertion_point(struct view *view,
 
         return leaf;
     } else if (view->layout == VIEW_STACK) {
+        if (view->root->window_count+1 >= NODE_MAX_WINDOW_COUNT) return NULL;
         view_stack_window_node(view->root, window);
         return view->root;
     }
@@ -824,7 +826,7 @@ uint32_t *view_find_window_list(struct view *view, int *window_count)
     uint32_t *window_list = ts_alloc_list(uint32_t, capacity);
 
     for (struct window_node *node = window_node_find_first_leaf(view->root); node; node = window_node_find_next_leaf(node)) {
-        if (*window_count + node->window_count >= capacity) {
+        while (*window_count + node->window_count >= capacity) {
             ts_expand(window_list, sizeof(uint32_t) * capacity, sizeof(uint32_t) * capacity);
             capacity *= 2;
         }

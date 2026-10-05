@@ -41,11 +41,12 @@ void window_manager_query_windows_for_spaces(FILE *rsp, uint64_t *space_list, in
 
     int window_count = 0;
     uint32_t *window_list = space_window_list_for_connection(space_list, space_count, 0, &window_count, true);
+    uint64_t *mc_space_list = space_manager_mission_control_space_list();
 
     fprintf(rsp, "[");
     for (int i = 0; i < window_count; ++i) {
         struct window *window = window_manager_find_window(&g_window_manager, window_list[i]);
-        if (window) window_serialize(rsp, window, flags); else window_nonax_serialize(rsp, window_list[i], flags);
+        if (window) window_serialize(rsp, window, flags, mc_space_list); else window_nonax_serialize(rsp, window_list[i], flags, mc_space_list);
         if (i < window_count - 1) fprintf(rsp, ",");
     }
     fprintf(rsp, "]\n");
@@ -119,11 +120,14 @@ void window_manager_apply_manage_rule_effects_to_window(struct space_manager *sm
 void window_manager_apply_rule_effects_to_window(struct space_manager *sm, struct window_manager *wm, struct window *window, struct rule_effects *effects)
 {
     if (effects->sid || effects->did) {
-        if (!window_is_fullscreen(window) && !space_is_fullscreen(window_space(window->id))) {
+        uint64_t window_sid = window_space(window->id);
+        if (!window_is_fullscreen(window) && !space_is_fullscreen(window_sid)) {
             uint64_t sid = effects->sid ? effects->sid : display_space_id(effects->did);
-            window_manager_send_window_to_space(sm, wm, window, sid, true);
-            if (rule_effects_check_flag(effects, RULE_FOLLOW_SPACE) || effects->fullscreen == RULE_PROP_ON) {
-                space_manager_focus_space(sid);
+            if (sid != window_sid) {
+                window_manager_send_window_to_space(sm, wm, window, sid, true);
+                if (rule_effects_check_flag(effects, RULE_FOLLOW_SPACE) || effects->fullscreen == RULE_PROP_ON) {
+                    space_manager_focus_space(sid);
+                }
             }
         }
     }
@@ -292,7 +296,7 @@ void window_manager_remove_managed_window(struct window_manager *wm, uint32_t wi
 
 void window_manager_add_managed_window(struct window_manager *wm, struct window *window, struct view *view)
 {
-    if (view->layout == VIEW_FLOAT) return;
+    if (!view || view->layout == VIEW_FLOAT) return;
     table_add(&wm->managed_window, &window->id, view);
     window_manager_purify_window(wm, window);
 }
@@ -1520,7 +1524,7 @@ struct window *window_manager_create_and_add_window(struct space_manager *sm, st
 
             if (g_verbose) {
                 fprintf(stdout, "window info: \n");
-                window_serialize(stdout, window, 0);
+                window_serialize(stdout, window, 0, NULL);
                 fprintf(stdout, "\n");
             }
         }
@@ -1534,7 +1538,7 @@ struct window *window_manager_create_and_add_window(struct space_manager *sm, st
 
         if (g_verbose) {
             fprintf(stdout, "window info: \n");
-            window_serialize(stdout, window, 0);
+            window_serialize(stdout, window, 0, NULL);
             fprintf(stdout, "\n");
         }
     }
@@ -1607,6 +1611,7 @@ static uint32_t *window_manager_existing_application_window_list(struct applicat
 bool window_manager_add_existing_application_windows(struct space_manager *sm, struct window_manager *wm, struct application *application, int refresh_index)
 {
     bool result = false;
+    int tracked_window_count = wm->window.count;
 
     int global_window_count;
     uint32_t *global_window_list = window_manager_existing_application_window_list(application, &global_window_count);
@@ -1645,6 +1650,10 @@ bool window_manager_add_existing_application_windows(struct space_manager *sm, s
             bool missing_window = false;
             uint32_t *app_window_list = NULL;
 
+            int probe_role_count = 0;
+            int probe_window_count = 0;
+            uint64_t probe_last_window_element_id = 0;
+
             for (int i = 0; i < global_window_count; ++i) {
                 struct window *window = window_manager_find_window(wm, global_window_list[i]);
                 if (!window) {
@@ -1678,14 +1687,20 @@ bool window_manager_add_existing_application_windows(struct space_manager *sm, s
 
                     memcpy(data+0xc, &element_id, sizeof(uint64_t));
                     AXUIElementRef element_ref = _AXUIElementCreateWithRemoteToken(data_ref);
+                    if (!element_ref) continue;
 
                     const void *role = NULL;
                     AXUIElementCopyAttributeValue(element_ref, kAXRoleAttribute, &role);
 
                     if (role) {
+                        ++probe_role_count;
                         if (CFEqual(role, kAXWindowRole)) {
                             uint32_t element_wid = ax_window_id(element_ref);
                             bool matched = false;
+
+                            ++probe_window_count;
+                            probe_last_window_element_id = element_id;
+                            debug("%s: probe %s element_id=%llu wid=%d\n", __FUNCTION__, application->name, element_id, element_wid);
 
                             if (element_wid != 0) {
                                 for (int i = 0; i < app_window_list_len; ++i) {
@@ -1702,9 +1717,13 @@ bool window_manager_add_existing_application_windows(struct space_manager *sm, s
                             } else {
                                 CFRelease(element_ref);
                             }
+                        } else {
+                            CFRelease(element_ref);
                         }
 
                         CFRelease(role);
+                    } else {
+                        CFRelease(element_ref);
                     }
                 }
 
@@ -1712,7 +1731,11 @@ bool window_manager_add_existing_application_windows(struct space_manager *sm, s
             }
 
             if (ts_buf_len(app_window_list) > 0) {
-                debug("%s: workaround failed to resolve all windows for %s\n", __FUNCTION__, application->name);
+                debug("%s: workaround failed to resolve all windows for %s (probed roles=%d windows=%d last_window_element_id=%llu unresolved=%d)\n",
+                      __FUNCTION__, application->name, probe_role_count, probe_window_count, probe_last_window_element_id, ts_buf_len(app_window_list));
+                for (int i = 0; i < ts_buf_len(app_window_list); ++i) {
+                    debug("%s:   unresolved wid=%d for %s\n", __FUNCTION__, app_window_list[i], application->name);
+                }
                 buf_push(wm->applications_to_refresh, application);
             } else {
                 debug("%s: workaround resolved all windows for %s\n", __FUNCTION__, application->name);
@@ -1741,6 +1764,11 @@ bool window_manager_add_existing_application_windows(struct space_manager *sm, s
     }
 
     if (window_list_ref) CFRelease(window_list_ref);
+
+    // subscribe windows found here to SLS window_destroyed in case their AX destroyed notification is missed
+    if (wm->window.count != tracked_window_count && (workspace_is_macos_sequoia() || (workspace_is_macos_tahoe() || workspace_is_macos_goldengate()))) {
+        update_window_notifications();
+    }
 
     return result;
 }
@@ -1805,6 +1833,10 @@ enum window_op_error window_manager_stack_window(struct space_manager *sm, struc
     struct view *a_view = window_manager_find_managed_window(wm, a);
     if (!a_view) return WINDOW_OP_ERROR_INVALID_SRC_NODE;
 
+    // check before untiling b, so a full stack leaves b where it was
+    struct window_node *a_node = view_find_window_node(a_view, a->id);
+    if (a_node->window_count+1 >= NODE_MAX_WINDOW_COUNT) return WINDOW_OP_ERROR_MAX_STACK;
+
     struct view *b_view = window_manager_find_managed_window(wm, b);
     if (b_view) {
         space_manager_untile_window(b_view, b);
@@ -1816,8 +1848,8 @@ enum window_op_error window_manager_stack_window(struct space_manager *sm, struc
         if (window_check_flag(b, WINDOW_STICKY)) window_manager_make_window_sticky(sm, wm, b, false);
     }
 
-    struct window_node *a_node = view_find_window_node(a_view, a->id);
-    if (a_node->window_count+1 >= NODE_MAX_WINDOW_COUNT) return WINDOW_OP_ERROR_MAX_STACK;
+    // untiling b can restructure a's tree, so look a's node up again
+    a_node = view_find_window_node(a_view, a->id);
 
     view_stack_window_node(a_node, b);
     window_manager_add_managed_window(wm, b, a_view);
@@ -2614,7 +2646,7 @@ static void window_manager_check_for_windows_on_space(struct window_manager *wm,
             // This is necessary to make sure that we do not call the AX API for each modification to the tree.
             //
 
-            view_add_window_node(view, window);
+            if (!view_add_window_node(view, window)) continue;
             window_manager_adjust_layer(window, LAYER_BELOW);
             window_manager_add_managed_window(wm, window, view);
             view_set_flag(view, VIEW_IS_DIRTY);
@@ -2745,8 +2777,21 @@ void window_manager_begin(struct space_manager *sm, struct window_manager *wm)
                 window_manager_add_application(wm, application);
                 window_manager_add_existing_application_windows(sm, wm, application, -1);
             } else {
+                bool ax_retry = application->ax_retry;
+
                 application_unobserve(application);
                 application_destroy(application);
+                debug("%s: could not observe notifications for %s (%d) (%d)\n", __FUNCTION__, process->name, process->pid, ax_retry);
+
+                // applications that are busy or not yet settled (common right after wake) report kAXErrorCannotComplete
+                // retry them through the application-launched path instead of dropping them
+                if (ax_retry) {
+                    __block ProcessSerialNumber psn = process->psn;
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1f * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                        struct process *_process = process_manager_find_process(&g_process_manager, &psn);
+                        if (_process) event_loop_post(&g_event_loop, APPLICATION_LAUNCHED, _process, 0);
+                    });
+                }
             }
         } else {
             debug("%s: %s (%d) is not observable, subscribing to activationPolicy changes\n", __FUNCTION__, process->name, process->pid);

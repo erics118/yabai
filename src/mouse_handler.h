@@ -63,6 +63,8 @@ struct mouse_state
 {
     CFMachPortRef handle;
     CFRunLoopSourceRef runloop_source;
+    CFRunLoopRef runloop;
+    pthread_t thread;
     bool consume_mouse_click;
     bool drag_detected;
     CGEventRef consumed_event;

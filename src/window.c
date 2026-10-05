@@ -118,7 +118,7 @@ static inline const char *window_layer(int level)
     return "unknown";
 }
 
-void window_nonax_serialize(FILE *rsp, uint32_t wid, uint64_t flags)
+void window_nonax_serialize(FILE *rsp, uint32_t wid, uint64_t flags, uint64_t *mc_space_list)
 {
     TIME_FUNCTION;
 
@@ -240,7 +240,7 @@ void window_nonax_serialize(FILE *rsp, uint32_t wid, uint64_t flags)
     if (flags & WINDOW_PROPERTY_SPACE) {
         if (did_output) fprintf(rsp, ",\n");
 
-        int space = space_manager_mission_control_index(sid);
+        int space = space_manager_mission_control_index_in_list(mc_space_list, sid);
         fprintf(rsp, "\t\"space\":%d", space);
         did_output = true;
     }
@@ -406,7 +406,7 @@ void window_nonax_serialize(FILE *rsp, uint32_t wid, uint64_t flags)
     fprintf(rsp, "\n}");
 }
 
-void window_serialize(FILE *rsp, struct window *window, uint64_t flags)
+void window_serialize(FILE *rsp, struct window *window, uint64_t flags, uint64_t *mc_space_list)
 {
     TIME_FUNCTION;
 
@@ -538,7 +538,7 @@ void window_serialize(FILE *rsp, struct window *window, uint64_t flags)
     if (flags & WINDOW_PROPERTY_SPACE) {
         if (did_output) fprintf(rsp, ",\n");
 
-        int space = space_manager_mission_control_index(sid);
+        int space = space_manager_mission_control_index_in_list(mc_space_list, sid);
         fprintf(rsp, "\t\"space\":%d", space);
         did_output = true;
     }
@@ -718,12 +718,13 @@ char *window_property_title_ts(uint32_t wid)
 
     char *result = ts_cfstring_copy(value);
     CFRelease(value);
-    return result;
+    return result ? result : ts_string_copy("");
 }
 
 char *window_title_ts(struct window *window)
 {
-    return window->title ? ts_cfstring_copy(window->title) : ts_string_copy("");
+    char *result = window->title ? ts_cfstring_copy(window->title) : NULL;
+    return result ? result : ts_string_copy("");
 }
 
 CFStringRef window_title(struct window *window)
@@ -1004,7 +1005,7 @@ char *window_role_ts(struct window *window)
     if (!role) return ts_string_copy("");
 
     char *result = ts_cfstring_copy(role);
-    return result;
+    return result ? result : ts_string_copy("");
 }
 
 CFStringRef window_ax_subrole(struct window *window)
@@ -1025,7 +1026,7 @@ char *window_subrole_ts(struct window *window)
     if (!subrole) return ts_string_copy("");
 
     char *result = ts_cfstring_copy(subrole);
-    return result;
+    return result ? result : ts_string_copy("");
 }
 
 static bool window_is_root(struct window *window)

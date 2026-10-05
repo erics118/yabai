@@ -44,6 +44,11 @@ static struct process *process_create(ProcessSerialNumber psn, pid_t pid)
     char *process_name = cfstring_copy(process_name_ref);
     CFRelease(process_name_ref);
 
+    if (!process_name) {
+        debug("%s: could not convert process name! ignoring..\n", __FUNCTION__);
+        return NULL;
+    }
+
     if (process_info.processType == 'XPC!') {
         debug("%s: xpc service '%s' detected! ignoring..\n", __FUNCTION__, process_name);
         free(process_name);

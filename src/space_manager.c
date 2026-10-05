@@ -446,9 +446,10 @@ struct view *space_manager_tile_window_on_space_with_insertion_point(struct spac
     struct view *view = space_manager_find_view(sm, sid);
     if (view->layout == VIEW_FLOAT) return view;
 
-    window_manager_adjust_layer(window, LAYER_BELOW);
     struct window_node *node = view_add_window_node_with_insertion_point(view, window, insertion_point);
-    assert(node);
+    if (!node) return NULL;
+
+    window_manager_adjust_layer(window, LAYER_BELOW);
 
     if (space_is_visible(view->sid)) {
         window_node_flush(node);
@@ -516,6 +517,43 @@ int space_manager_mission_control_index(uint64_t sid)
 out:
     CFRelease(display_spaces_ref);
     return desktop_cnt;
+}
+
+uint64_t *space_manager_mission_control_space_list(void)
+{
+    uint64_t *space_list = NULL;
+
+    CFArrayRef display_spaces_ref = SLSCopyManagedDisplaySpaces(g_connection);
+    if (!display_spaces_ref) return NULL;
+
+    int display_spaces_count = CFArrayGetCount(display_spaces_ref);
+    for (int i = 0; i < display_spaces_count; ++i) {
+        CFDictionaryRef display_ref = CFArrayGetValueAtIndex(display_spaces_ref, i);
+        CFArrayRef spaces_ref = CFDictionaryGetValue(display_ref, CFSTR("Spaces"));
+        int spaces_count = CFArrayGetCount(spaces_ref);
+
+        for (int j = 0; j < spaces_count; ++j) {
+            uint64_t sid = 0;
+            CFDictionaryRef space_ref = CFArrayGetValueAtIndex(spaces_ref, j);
+            CFNumberRef sid_ref = CFDictionaryGetValue(space_ref, CFSTR("id64"));
+            CFNumberGetValue(sid_ref, CFNumberGetType(sid_ref), &sid);
+            ts_buf_push(space_list, sid);
+        }
+    }
+
+    CFRelease(display_spaces_ref);
+    return space_list;
+}
+
+int space_manager_mission_control_index_in_list(uint64_t *space_list, uint64_t sid)
+{
+    if (!space_list) return space_manager_mission_control_index(sid);
+
+    for (int i = 0; i < ts_buf_len(space_list); ++i) {
+        if (space_list[i] == sid) return i+1;
+    }
+
+    return 0;
 }
 
 uint64_t space_manager_mission_control_space(int desktop_id)
