@@ -20,8 +20,7 @@ typedef OBSERVER_CALLBACK(observer_callback);
 #define AX_APPLICATION_ALL                  (AX_APPLICATION_WINDOW_CREATED |\
                                              AX_APPLICATION_WINDOW_FOCUSED |\
                                              AX_APPLICATION_WINDOW_MOVED |\
-                                             AX_APPLICATION_WINDOW_RESIZED |\
-                                             AX_APPLICATION_WINDOW_TITLE_CHANGED)
+                                             AX_APPLICATION_WINDOW_RESIZED)
 
 static const char *ax_error_str[] =
 {
