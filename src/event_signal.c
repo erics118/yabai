@@ -61,6 +61,9 @@ void event_signal_flush(void)
 {
     if (!g_signal_storage.used) return;
 
+    // the child exits through exit(), which would write any buffered output a second time
+    fflush(stdout);
+    fflush(stderr);
     pid_t pid = fork();
     if (pid) {
         g_signal_storage.used = 0;
