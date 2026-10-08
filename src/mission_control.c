@@ -14,7 +14,7 @@ static CONNECTION_CALLBACK(connection_handler)
     } else if (type == 1328) {
         uint64_t sid; memcpy(&sid, data, sizeof(uint64_t));
         event_loop_post(&g_event_loop, SLS_SPACE_DESTROYED, (void *) (intptr_t) sid, 0);
-    } else if (type == 808) {
+    } else if (type == 808 || type == 815 || type == 816) {
         uint32_t wid; memcpy(&wid, data, sizeof(uint32_t));
         event_loop_post(&g_event_loop, SLS_WINDOW_ORDERED, (void *) (intptr_t) wid, 0);
     } else if (type == 804) {

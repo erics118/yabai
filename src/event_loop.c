@@ -661,6 +661,12 @@ static EVENT_HANDLER(WINDOW_FOCUSED)
         return;
     }
 
+    if (window_manager_refresh_window_ref(window)) {
+        struct view *view = window_manager_find_managed_window(&g_window_manager, window);
+        struct window_node *node = view ? view_find_window_node(view, window->id) : NULL;
+        if (node) window_node_flush(node);
+    }
+
     if (!application_is_frontmost(window->application)) {
         return;
     }

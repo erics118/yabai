@@ -2177,6 +2177,32 @@ bool window_manager_close_window(struct window *window)
     return true;
 }
 
+// some apps hide a window on close and show it again under the same id with a new AX element
+// the element we hold then fails every call, so adopt the live one once the window takes focus
+bool window_manager_refresh_window_ref(struct window *window)
+{
+    CFTypeRef role = NULL;
+    AXError result = AXUIElementCopyAttributeValue(window->ref, kAXRoleAttribute, &role);
+    if (role) CFRelease(role);
+    if (result != kAXErrorInvalidUIElement) return false;
+
+    CFTypeRef ref = NULL;
+    AXUIElementCopyAttributeValue(window->application->ref, kAXFocusedWindowAttribute, &ref);
+    if (!ref || ax_window_id(ref) != window->id) {
+        debug("%s: %s %d has a dead AX element and no live replacement\n", __FUNCTION__, window->application->name, window->id);
+        if (ref) CFRelease(ref);
+        return false;
+    }
+
+    debug("%s: %s %d adopted a new AX element\n", __FUNCTION__, window->application->name, window->id);
+    window_unobserve(window);
+    CFRelease(window->ref);
+    window->ref = ref;
+    window_observe(window);
+    window->frame = window_ax_frame(window);
+    return true;
+}
+
 void window_manager_send_window_to_space(struct space_manager *sm, struct window_manager *wm, struct window *window, uint64_t dst_sid, bool moved_by_rule)
 {
     TIME_FUNCTION;
